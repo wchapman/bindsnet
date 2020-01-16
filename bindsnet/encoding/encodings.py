@@ -110,8 +110,8 @@ def poisson(datum: torch.Tensor, time: int, dt: float = 1.0, **kwargs) -> torch.
 
     # Compute firing rates in seconds as function of data intensity,
     # accounting for simulation time step.
-    rate = torch.zeros(size)
-    rate[datum != 0] = 1 / datum[datum != 0] * (1000 / dt)
+    rate = 1 / datum * (1000 / dt)
+    rate[datum == 0] = 0
 
     # Create Poisson distribution and sample inter-spike intervals
     # (incrementing by 1 to avoid zero intervals).
