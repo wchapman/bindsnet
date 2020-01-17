@@ -95,6 +95,7 @@ class NetworkMonitor(AbstractMonitor):
         connections: Optional[Iterable[str]] = None,
         state_vars: Optional[Iterable[str]] = None,
         time: Optional[int] = None,
+        interval: Optional[int] = 1,
     ):
         # language=rst
         """
@@ -106,6 +107,7 @@ class NetworkMonitor(AbstractMonitor):
         :param state_vars: List of strings indicating names of state variables to
             record.
         :param time: If not ``None``, pre-allocate memory for state variable recording.
+        :param interval: Record variables only every Nth time step
         """
         super().__init__()
 
@@ -118,9 +120,14 @@ class NetworkMonitor(AbstractMonitor):
         )
         self.state_vars = state_vars if state_vars is not None else ("v", "s", "w")
         self.time = time
+        self.interval = interval
 
         if self.time is not None:
             self.i = 0
+            self.n_samp = torch.div(time, interval).int()
+            self.col = 0
+
+
 
         # Initialize empty recording.
         self.recording = {k: {} for k in self.layers + self.connections}
@@ -142,13 +149,13 @@ class NetworkMonitor(AbstractMonitor):
                 for l in self.layers:
                     if hasattr(self.network.layers[l], v):
                         self.recording[l][v] = torch.zeros(
-                            self.time, *getattr(self.network.layers[l], v).size()
+                            self.n_samp, *getattr(self.network.layers[l], v).size()
                         )
 
                 for c in self.connections:
                     if hasattr(self.network.connections[c], v):
                         self.recording[c][v] = torch.zeros(
-                            self.time, *getattr(self.network.connections[c], v).size()
+                            self.n_samp, *getattr(self.network.connections[c], v).size()
                         )
 
     def get(self) -> Dict[str, Dict[str, Union[Nodes, AbstractConnection]]]:
@@ -183,16 +190,18 @@ class NetworkMonitor(AbstractMonitor):
                         )
 
         else:
-            for v in self.state_vars:
-                for l in self.layers:
-                    if hasattr(self.network.layers[l], v):
-                        data = getattr(self.network.layers[l], v).float().unsqueeze(0)
-                        self.recording[l][v][self.i] = data
+            if (self.i % self.interval) == 0:
+                for v in self.state_vars:
+                    for l in self.layers:
+                        if hasattr(self.network.layers[l], v):
+                            data = getattr(self.network.layers[l], v).float().unsqueeze(0)
+                            self.recording[l][v][self.col] = data
 
-                for c in self.connections:
-                    if hasattr(self.network.connections[c], v):
-                        data = getattr(self.network.connections[c], v).unsqueeze(0)
-                        self.recording[c][self.i] = data
+                    for c in self.connections:
+                        if hasattr(self.network.connections[c], v):
+                            data = getattr(self.network.connections[c], v).unsqueeze(0)
+                            self.recording[c][v][self.col] = data
+                self.col += 1
 
             self.i += 1
 
@@ -242,6 +251,7 @@ class NetworkMonitor(AbstractMonitor):
 
         if self.time is not None:
             self.i = 0
+            self.col = 0
 
         # If no simulation time is specified, specify 0-dimensional recordings.
         if self.time is None:
@@ -260,11 +270,11 @@ class NetworkMonitor(AbstractMonitor):
                 for l in self.layers:
                     if hasattr(self.network.layers[l], v):
                         self.recording[l][v] = torch.zeros(
-                            self.time, *getattr(self.network.layers[l], v).size()
+                            self.n_samp, *getattr(self.network.layers[l], v).size()
                         )
 
                 for c in self.connections:
                     if hasattr(self.network.connections[c], v):
                         self.recording[c][v] = torch.zeros(
-                            self.time, *getattr(self.network.connections[c], v).size()
+                            self.n_samp, *getattr(self.network.connections[c], v).size()
                         )
